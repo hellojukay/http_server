@@ -23,7 +23,7 @@ class http_server cluster port =
       with Unix.Unix_error (_, s2, s3) as e ->
         Log.error (s2 ^ s3);
         let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
-        Printf.eprintf "there was an error: %s%s\n" msg stack;
+        Printf.eprintf "%s%s\n" msg stack;
         raise e
 
     method wait_pid list =
@@ -40,21 +40,25 @@ class http_server cluster port =
     method listen socket = Unix.listen socket max_queue
 
     method accept socket =
-      Unix.accept socket |> fun (tcp, address) ->
-      Log.info (self#string_of_address address);
-      let http = new Http.http tcp in
-      http#parse_http ()
+      while true do
+        Unix.accept socket |> fun (tcp, address) ->
+        Log.info (self#string_of_address address);
+        let http = new Http.http tcp in
+        http#parse_http ()
+      done
 
     method start () =
       let socket = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+      (* 只能在当前线程中 bind *)
       self#bind socket;
-      self#listen socket;
 
       let pids = ref [] in
       let n = ref num in
       while !n > 0 do
         n := !n - 1;
         let pid = Unix.fork () in
+        (* 子进程中都监听socket *)
+        self#listen socket;
         if pid == 0 then self#accept socket else pids := !pids @ [ pid ]
       done;
       self#wait_pid !pids
