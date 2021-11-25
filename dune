@@ -1,0 +1,3 @@
+(executable 
+(name http_server)
+(libraries threads.posix unix core))
