@@ -6,6 +6,12 @@ class http_server cluster port =
 
     val max_queue = 100
 
+    method string_of_address address =
+      match address with
+      | Unix.ADDR_INET (net, port) ->
+          Unix.string_of_inet_addr net ^ Printf.sprintf "%d" port
+      | Unix.ADDR_UNIX s -> s
+
     method bind socket =
       (* 创建 socket *)
       (* 创建本地地址 *)
@@ -26,14 +32,18 @@ class http_server cluster port =
         | [] -> ()
         | pid :: next ->
             Unix.waitpid [ Unix.WUNTRACED ] pid |> ignore;
-            Log.info (Printf.sprintf "child process %d exited\n" pid);
+            Log.warn (Printf.sprintf "child process %d exited" pid);
             wait_all next
       in
       wait_all list
 
     method listen socket = Unix.listen socket max_queue
 
-    method accept socket = Unix.accept socket |> ignore
+    method accept socket =
+      Unix.accept socket |> fun (tcp, address) ->
+      Log.info (self#string_of_address address);
+      let http = new Http.http tcp in
+      http#parse_http ()
 
     method start () =
       let socket = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
